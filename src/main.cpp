@@ -75,13 +75,25 @@ void setup()
 
 uint8_t f = 0;
 
+bool isOn = false;
+
 void loop()
 {
   M5.update();
   uint16_t ir, red;
   sensor.update();
 
-  while (sensor.getRawValues(&ir, &red))
+  if (M5.BtnA.wasPressed())
+  {
+    isOn = !isOn;
+    if (isOn)
+    {
+      M5.Lcd.clear();
+      px = 0;
+    }
+  }
+
+  while (sensor.getRawValues(&ir, &red) && isOn)
   {
     val_red[px] = red;
     val_ir[px] = ir;
