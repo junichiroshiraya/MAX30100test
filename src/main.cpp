@@ -47,12 +47,14 @@ long sum_slope = 0;
 void setup()
 {
   M5.begin();
-
+  M5.Lcd.print("Welcome.");
+  delay(1000);
   if (!sensor.begin())
   {
     printf("fail\n");
-    for (;;)
-      ;
+    M5.Lcd.print("MAX30100 not found.");
+    delay(1000);
+    M5.Power.powerOff();
   }
   else
   {
@@ -90,6 +92,10 @@ void loop()
     {
       M5.Lcd.clear();
       px = 0;
+      sensor.resume();
+    } else {
+      sensor.shutdown();
+      M5.Lcd.clear();
     }
   }
 
@@ -178,7 +184,7 @@ void loop()
           M5.Lcd.drawPixel(Y - y_red, x, WHITE);
         else
           M5.Lcd.drawPixel(Y - y_red, x, RED);
-        //      M5.Lcd.drawPixel(Y - y_ir, x, GREEN);
+          //M5.Lcd.drawPixel(Y - y_ir, x, GREEN);
         dx = (dx + 1) % X;
       }
     }
