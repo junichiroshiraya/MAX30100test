@@ -54,6 +54,8 @@ const char* published_url = "https://script.google.com/macros/s/AKfycbxtWGsqgrQA
 char pubMessage[pubPeriod];
 uint16_t pubPx = 0;
 
+void sendToGoogleSheets();
+
 void setup()
 {
   M5.begin();
