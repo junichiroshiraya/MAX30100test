@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <M5unified.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 
 #include "MAX30100.h"
 
@@ -44,6 +46,14 @@ uint8_t fValid = 0;
 uint32_t sum_base = 0, sum_data = 0;
 long sum_slope = 0;
 
+// Google Sheets
+char *ssid = "ifdl";
+char *password = "hogeupip5";
+const char* published_url = "https://script.google.com/macros/s/AKfycbxtWGsqgrQA86Act8Q9WvcyoNSJOnx0JBtrjpt59bywtLP3WCYeJD9xovXpQr6IWO9G/exec";
+#define pubPeriod 3000
+char pubMessage[pubPeriod];
+uint16_t pubPx = 0;
+
 void setup()
 {
   M5.begin();
@@ -73,6 +83,15 @@ void setup()
     val_red[x] = 0;
     val_ir[x] = 0;
   }
+
+  // Wi-Fi
+  Serial.println("Connecting to "+String(ssid));
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("WiFi Connected.");
 }
 
 uint8_t f = 0;
@@ -92,15 +111,20 @@ void loop()
     {
       M5.Lcd.clear();
       px = 0;
+      pubPx = 0;
       sensor.resume();
     } else {
       sensor.shutdown();
       M5.Lcd.clear();
+      sendToGoogleSheets();
     }
   }
 
   while (sensor.getRawValues(&ir, &red) && isOn)
   {
+    pubMessage[pubPx] = red;
+    pubPx = (pubPx + 1) % pubPeriod;
+
     val_red[px] = red;
     val_ir[px] = ir;
     uint16_t px0;
@@ -190,4 +214,28 @@ void loop()
     }
     px = (px + 1) % X;
   }
+}
+
+void sendToGoogleSheets()
+{
+    M5.Lcd.println("Sending...");
+    
+    HTTPClient http;
+    Serial.print("Sending start\n");
+    http.begin(published_url);
+   
+    Serial.print("POST\n");
+    int httpCode = http.POST(pubMessage);
+   
+    if(httpCode > 0){
+      Serial.printf("HTTP Response:%d\n", httpCode);
+      if(httpCode == HTTP_CODE_OK){
+        Serial.println("HTTP Success!!");
+        String payload = http.getString();
+        Serial.println(payload);
+      }
+    }else{
+      Serial.printf("HTTP failed, error: %s\n", http.errorToString(httpCode).c_str());
+    }
+    http.end();
 }
