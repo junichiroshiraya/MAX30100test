@@ -3,13 +3,11 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-
 #include "MAX30100.h"
 
 // Sampling is tightly related to the dynamic range of the ADC.
 // refer to the datasheet for further info
 #define SAMPLING_RATE MAX30100_SAMPRATE_100HZ
-//#define SAMPLING_RATE MAX30100_SAMPRATE_50HZ
 
 // The LEDs currents must be set to a level that avoids clipping and maximises the
 // dynamic range
@@ -46,66 +44,41 @@ uint8_t fValid = 0;
 uint32_t sum_base = 0, sum_data = 0;
 long sum_slope = 0;
 
+uint8_t f = 0;
+
+bool isOn = false;
+
 // Google Sheets
 char *ssid = "ifdl";
 char *password = "hogeupip5";
-const char* published_url = "https://script.google.com/macros/s/AKfycbxtWGsqgrQA86Act8Q9WvcyoNSJOnx0JBtrjpt59bywtLP3WCYeJD9xovXpQr6IWO9G/exec";
-#define pubPeriod 3000
-char pubMessage[pubPeriod];
-uint16_t pubPx = 0;
+const char* published_url = "https://script.google.com/macros/s/AKfycbzapF-EfOt_K34wxz9O-4fD5xoaAAFShaLQ6UTJSYmJVDDi3t-Qz9awCJgXJoMLVrOm/exec";
+#define pubPeriod 300
+int pubData[pubPeriod];
+String pubMessage;
+int pubPx = 0;
 
+void sensorSetup();
+void connectWifi();
 void sendToGoogleSheets();
 
 void setup()
 {
   M5.begin();
-  M5.Lcd.print("Welcome.");
-  delay(1000);
-  if (!sensor.begin())
-  {
-    printf("fail\n");
-    M5.Lcd.print("MAX30100 not found.");
-    delay(1000);
-    M5.Power.powerOff();
-  }
-  else
-  {
-    printf("ok\n");
-  }
-
-  // Set up the wanted parameters
-  sensor.setMode(MAX30100_MODE_SPO2_HR);
-  sensor.setLedsCurrent(IR_LED_CURRENT, RED_LED_CURRENT);
-  sensor.setLedsPulseWidth(PULSE_WIDTH);
-  sensor.setSamplingRate(SAMPLING_RATE);
-  sensor.setHighresModeEnabled(HIGHRES_MODE);
+  connectWifi();
+  sensorSetup();
   M5.Lcd.clear();
   for (uint16_t x = 0; x < N; x++)
   {
     val_red[x] = 0;
     val_ir[x] = 0;
   }
-
-  // Wi-Fi
-  Serial.println("Connecting to "+String(ssid));
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED){
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("WiFi Connected.");
 }
-
-uint8_t f = 0;
-
-bool isOn = false;
 
 void loop()
 {
   M5.update();
   uint16_t ir, red;
-  sensor.update();
-
+  
   if (M5.BtnA.wasPressed())
   {
     isOn = !isOn;
@@ -114,18 +87,24 @@ void loop()
       M5.Lcd.clear();
       px = 0;
       pubPx = 0;
-      sensor.resume();
+      sensorSetup();
     } else {
-      sensor.shutdown();
-      M5.Lcd.clear();
+      Serial.println("Stopped");
       sendToGoogleSheets();
     }
   }
 
-  while (sensor.getRawValues(&ir, &red) && isOn)
+  sensor.update(); 
+  while (isOn && sensor.getRawValues(&ir, &red))
   {
-    pubMessage[pubPx] = red;
-    pubPx = (pubPx + 1) % pubPeriod;
+    pubData[pubPx] = red;
+    if(pubPx++ == pubPeriod)
+    {
+      Serial.println("Collected 3000 data");
+      sendToGoogleSheets();
+      isOn = false;
+      break;
+    }
 
     val_red[px] = red;
     val_ir[px] = ir;
@@ -162,7 +141,7 @@ void loop()
       fValid = 1;
     else
       fValid = 0;
-    printf("%d %d %d %d %d\n", red, base, data, periodPN, periodNP);
+    Serial.printf("%d %d %d %d %d %d %d\n", pubPx, millis(), red, base, data, periodPN, periodNP);
     //    printf(">red:%d\n", val_red[px]);
     //    printf(">max:%d\n", max_red);
     //    printf(">min:%d\n", min_red);
@@ -218,26 +197,52 @@ void loop()
   }
 }
 
+void sensorSetup()
+{  
+  if (!sensor.begin())
+  {
+    printf("fail\n");
+    M5.Lcd.print("MAX30100 not found.");
+  }
+  else
+  {
+    printf("ok\n");
+  }
+
+  // Set up the wanted parameters
+  sensor.setMode(MAX30100_MODE_SPO2_HR);
+  sensor.setLedsCurrent(IR_LED_CURRENT, RED_LED_CURRENT);
+  sensor.setLedsPulseWidth(PULSE_WIDTH);
+  sensor.setSamplingRate(SAMPLING_RATE);
+  sensor.setHighresModeEnabled(HIGHRES_MODE);
+  sensor.resume();
+}
+
+void connectWifi()
+{
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to "+String(ssid));
+  while (WiFi.status() != WL_CONNECTED){
+    delay(500);
+  }
+  Serial.println("Connected");
+}
+
 void sendToGoogleSheets()
 {
-    M5.Lcd.println("Sending...");
-    
-    HTTPClient http;
-    Serial.print("Sending start\n");
-    http.begin(published_url);
-   
-    Serial.print("POST\n");
-    int httpCode = http.POST(pubMessage);
-   
-    if(httpCode > 0){
-      Serial.printf("HTTP Response:%d\n", httpCode);
-      if(httpCode == HTTP_CODE_OK){
-        Serial.println("HTTP Success!!");
-        String payload = http.getString();
-        Serial.println(payload);
-      }
-    }else{
-      Serial.printf("HTTP failed, error: %s\n", http.errorToString(httpCode).c_str());
-    }
-    http.end();
+  pubMessage = "";
+  for (uint16_t i = 0; i < pubPeriod; i++){
+    pubMessage += String(pubData[i]) + ",";
+  }
+  Serial.print("HTTP start\n");
+  HTTPClient http;
+  http.begin(published_url);
+  int httpCode = http.POST(pubMessage);
+  if(httpCode > 0){
+    Serial.printf("HTTP Response:%d\n", httpCode);
+  }else{
+    Serial.printf("HTTP failed, error: %s\n", http.errorToString(httpCode).c_str());
+  }
+  http.end();
+  //WiFi.disconnect(true, true);
 }
