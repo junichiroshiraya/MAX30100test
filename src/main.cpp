@@ -145,6 +145,8 @@ void loop()
     //    printf(">red:%d\n", val_red[px]);
     //    printf(">max:%d\n", max_red);
     //    printf(">min:%d\n", min_red);
+
+    // Start of drawing
     f++;
     if (f == 4) // draw every 4 samples
     {
@@ -193,6 +195,7 @@ void loop()
         dx = (dx + 1) % X;
       }
     }
+    // End of drawing
     px = (px + 1) % X;
   }
 }
@@ -244,5 +247,5 @@ void sendToGoogleSheets()
     Serial.printf("HTTP failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
-  //WiFi.disconnect(true, true);
+  WiFi.disconnect(true, true);
 }
