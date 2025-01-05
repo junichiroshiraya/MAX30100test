@@ -59,9 +59,11 @@ int pubPx = 0; // データ送信用のインデックスを初期化
 
 // Difine for calculate differencial
 #define AVE_WIDTH 10
-int average1[pubPeriod], diff1[pubPeriod];
-int average2[pubPeriod], diff2[pubPeriod];
-int average3[pubPeriod];
+float sum1, sum2, sum3;
+float original[pubPeriod];
+float average1[pubPeriod], diff1[pubPeriod];
+float average2[pubPeriod], diff2[pubPeriod];
+float average3[pubPeriod];
 
 void sensorSetup(); // センサのセットアップ関数を宣言
 void connectWifi(); // WiFi接続関数を宣言
@@ -103,7 +105,6 @@ void loop()
   sensor.update(); // センサの状態を更新
   while (isOn && sensor.getRawValues(&ir, &red))
   {
-    pubData[pubPx] = red; // データ送信用の配列に赤色データを追加
     if(pubPx++ == pubPeriod)
     {
       Serial.println("Collected 3000 data"); // シリアルモニタにデータ収集完了メッセージを表示
@@ -116,10 +117,11 @@ void loop()
     val_ir[px] = ir; // 赤外線データ配列にデータを追加
 
     /////////////////////////////
+    original[px] = static_cast<float>(red);
     if(px >= AVE_WIDTH) {		//px-AVE_WIDTH
-      int sum1=0;
+      sum1=0;
       for(int i = px-AVE_WIDTH; i<= px; i++) {
-        sum1 += val_red[i];
+        sum1 += original[i];
       }
       average1[px] = sum1 / (AVE_WIDTH+1);
     }
@@ -127,7 +129,7 @@ void loop()
       diff1[px] = average1[px] - average1[px-1];
     }
     if(px >= AVE_WIDTH*2+1) {		//px-AVE_WIDTH
-      int sum2=0;
+      sum2=0;
       for(int i = px-AVE_WIDTH; i<= px; i++) {
         sum2 += diff1[i];
       }
@@ -137,7 +139,7 @@ void loop()
       diff2[px] = average2[px] - average2[px-1];
     }
     if(px >= AVE_WIDTH*3+2) {		//px-AVE_WIDTH
-      int sum3=0;
+      sum3=0;
       for(int i = px-AVE_WIDTH; i<= px; i++) {
         sum3 += diff2[i];
       }
@@ -178,7 +180,7 @@ void loop()
       fValid = 1; // データが有効かどうかを判定
     else
       fValid = 0; // データが無効
-    Serial.printf("%d %d %d %d %d %d %d\n", pubPx, millis(), red, base, data, periodPN, periodNP); // シリアルモニタにデータを表示
+    //Serial.printf("%d %d %d %d %d %d %d\n", pubPx, millis(), red, base, data, periodPN, periodNP); // シリアルモニタにデータを表示
     //    printf(">red:%d\n", val_red[px]);
     //    printf(">max:%d\n", max_red);
     //    printf(">min:%d\n", min_red);
@@ -232,6 +234,9 @@ void loop()
       }
     }
     // End of drawing
+    Serial.printf("%d %d %d %d %f %f %f %f %f\n", px, pubPx, millis(), red, average1[px], diff1[px], average2[px], diff2[px], average3[px]); // シリアルモニタにデータを表示
+    pubData[pubPx] = average3[px]; // データ送信用の配列にデータを追加
+
     px = (px + 1) % X; // データ配列のインデックスを更新
   }
 }
@@ -259,10 +264,12 @@ void sensorSetup()
 
 void connectWifi()
 {
+  int cnt = 0; // カウンタを初期化
   WiFi.begin(ssid, password); // WiFiに接続
   Serial.println("Connecting to "+String(ssid)); // シリアルモニタに接続メッセージを表示
   while (WiFi.status() != WL_CONNECTED){
     delay(500); // 接続が完了するまで待機
+    if(cnt++ > 20) break; // カウンタが20を超えた場合、ループを抜ける
   }
   Serial.println("Connected"); // シリアルモニタに接続完了メッセージを表示
 }
